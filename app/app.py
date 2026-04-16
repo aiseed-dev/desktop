@@ -173,9 +173,13 @@ def create_app(page: ft.Page) -> None:
     )
 
     # File panel
+    def on_file_select(path: str):
+        preview_panel.load_file(path)
+        switch_center_tab(1)
+
     file_panel = FilePanel(
         get_project_dir=get_project_dir,
-        on_file_select=lambda path: preview_panel.load_file(path),
+        on_file_select=on_file_select,
         on_path_insert=lambda path: chat_panel.insert_text(path),
     )
 
@@ -314,38 +318,69 @@ def create_app(page: ft.Page) -> None:
         padding=ft.padding.symmetric(horizontal=12, vertical=6),
     )
 
-    # Bottom panel - manual tab switching
-    bottom_tab_content = ft.Container(expand=True)
-    bottom_tab_content.content = preview_panel
+    # Center panel - Chat / Editor tab switching
+    center_content = ft.Container(expand=True)
+    center_content.content = chat_panel
 
-    def switch_bottom_tab(index: int):
+    chat_tab_btn = ft.TextButton(
+        "Chat",
+        icon=ft.Icons.CHAT_ROUNDED,
+        style=ft.ButtonStyle(color=ft.Colors.BLUE_400),
+        on_click=lambda e: switch_center_tab(0),
+    )
+    editor_tab_btn = ft.TextButton(
+        "Editor",
+        icon=ft.Icons.EDIT_NOTE_ROUNDED,
+        style=ft.ButtonStyle(color=ft.Colors.WHITE54),
+        on_click=lambda e: switch_center_tab(1),
+    )
+
+    _center_tab_index = [0]  # mutable for closure access
+
+    def switch_center_tab(index: int):
+        _center_tab_index[0] = index
         if index == 0:
-            bottom_tab_content.content = preview_panel
+            center_content.content = chat_panel
+            chat_tab_btn.style = ft.ButtonStyle(color=ft.Colors.BLUE_400)
+            editor_tab_btn.style = ft.ButtonStyle(color=ft.Colors.WHITE54)
         else:
-            bottom_tab_content.content = build_panel
+            center_content.content = preview_panel
+            chat_tab_btn.style = ft.ButtonStyle(color=ft.Colors.WHITE54)
+            editor_tab_btn.style = ft.ButtonStyle(color=ft.Colors.BLUE_400)
         page.update()
 
-    bottom_tab_bar = ft.Row(
-        [
-            ft.TextButton(
-                "Preview / Editor",
-                icon=ft.Icons.PREVIEW_ROUNDED,
-                on_click=lambda e: switch_bottom_tab(0),
-            ),
-            ft.TextButton(
-                "Build",
-                icon=ft.Icons.BUILD_ROUNDED,
-                on_click=lambda e: switch_bottom_tab(1),
-            ),
-        ],
+    center_tab_bar = ft.Row(
+        [chat_tab_btn, editor_tab_btn],
         spacing=4,
     )
 
+    center_panel = ft.Column(
+        [
+            ft.Container(center_tab_bar, padding=ft.padding.only(left=8, top=4, bottom=2)),
+            ft.Divider(height=1, color=ft.Colors.WHITE10),
+            center_content,
+        ],
+        expand=True,
+        spacing=0,
+    )
+
+    # Bottom panel - Build
     bottom_panel = ft.Column(
         [
-            ft.Container(bottom_tab_bar, padding=ft.padding.only(left=8, top=4, bottom=2)),
+            ft.Container(
+                ft.Row(
+                    [
+                        ft.TextButton(
+                            "Build",
+                            icon=ft.Icons.BUILD_ROUNDED,
+                        ),
+                    ],
+                    spacing=4,
+                ),
+                padding=ft.padding.only(left=8, top=4, bottom=2),
+            ),
             ft.Divider(height=1, color=ft.Colors.WHITE10),
-            bottom_tab_content,
+            ft.Container(build_panel, expand=True),
         ],
         expand=True,
         spacing=0,
@@ -364,9 +399,9 @@ def create_app(page: ft.Page) -> None:
                         bgcolor="#16162a",
                         border=ft.Border.only(right=ft.BorderSide(1, ft.Colors.WHITE10)),
                     ),
-                    # Center: Chat Panel
+                    # Center: Chat / Editor (tab switch)
                     ft.Container(
-                        chat_panel,
+                        center_panel,
                         expand=True,
                         bgcolor="#1a1a2e",
                     ),
@@ -382,10 +417,10 @@ def create_app(page: ft.Page) -> None:
                 spacing=0,
                 vertical_alignment=ft.CrossAxisAlignment.STRETCH,
             ),
-            # Bottom: Preview/Editor / Build
+            # Bottom: Build
             ft.Container(
                 bottom_panel,
-                height=250,
+                height=200,
                 bgcolor="#16162a",
                 border=ft.Border.only(top=ft.BorderSide(1, ft.Colors.WHITE10)),
             ),
@@ -396,10 +431,13 @@ def create_app(page: ft.Page) -> None:
 
     page.add(main_content)
 
-    # Keyboard shortcut: Ctrl+S to save
+    # Keyboard shortcuts: Ctrl+S to save, Ctrl+E to toggle Chat/Editor
     def on_keyboard(e: ft.KeyboardEvent):
         if e.ctrl and e.key == "S":
             preview_panel.save_current()
+        elif e.ctrl and e.key == "E":
+            new_index = 1 if _center_tab_index[0] == 0 else 0
+            switch_center_tab(new_index)
 
     page.on_keyboard_event = on_keyboard
 
