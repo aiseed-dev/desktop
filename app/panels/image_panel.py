@@ -2,7 +2,6 @@
 
 import os
 import shutil
-import threading
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -150,25 +149,19 @@ class ImagePanel(ft.Column):
     def _on_refresh(self, e=None) -> None:
         self.refresh_images()
 
-    def _on_add_image(self, e) -> None:
+    async def _on_add_image(self, e) -> None:
         if not self.page:
             return
 
-        def pick():
-            fp = ft.FilePicker()
-            self.page.overlay.append(fp)
-            self.page.update()
-            files = fp.pick_files(
-                allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
-                allow_multiple=True,
-                dialog_title="画像を追加",
-            )
-            self.page.overlay.remove(fp)
-            self.page.update()
-            if files:
-                self._import_files(files)
-
-        threading.Thread(target=pick, daemon=True).start()
+        fp = ft.FilePicker()
+        self.page.services.register_service(fp)
+        files = await fp.pick_files(
+            allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
+            allow_multiple=True,
+            dialog_title="画像を追加",
+        )
+        if files:
+            self._import_files(files)
 
     def _import_files(self, files: list) -> None:
         image_dir = self._get_full_image_dir()

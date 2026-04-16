@@ -1,8 +1,5 @@
 """Main Flet application - Claude Code GUI."""
 
-import asyncio
-import threading
-
 import flet as ft
 
 from app.claude_cli import ClaudeCLI
@@ -229,23 +226,20 @@ def create_app(page: ft.Page) -> None:
 
     # Folder picker
     folder_picker = ft.FilePicker()
-    page.overlay.append(folder_picker)
+    page.services.register_service(folder_picker)
 
-    def pick_folder(e):
-        def do_pick():
-            result = folder_picker.get_directory_path(
-                dialog_title="プロジェクトディレクトリを選択"
-            )
-            if result:
-                config.project_dir = result
-                config.save()
-                project_dir_text.value = result
-                file_panel.refresh_tree()
-                image_panel.refresh_images()
-                start_watcher()
-                page.update()
-
-        threading.Thread(target=do_pick, daemon=True).start()
+    async def pick_folder(e):
+        result = await folder_picker.get_directory_path(
+            dialog_title="プロジェクトディレクトリを選択"
+        )
+        if result:
+            config.project_dir = result
+            config.save()
+            project_dir_text.value = result
+            file_panel.refresh_tree()
+            image_panel.refresh_images()
+            start_watcher()
+            page.update()
 
     # Top bar
     project_dir_text = ft.Text(
