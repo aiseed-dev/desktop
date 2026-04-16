@@ -62,6 +62,16 @@ class ChatMessage(ft.Container):
             visible=False,
         )
 
+        self.copy_button = ft.IconButton(
+            icon=ft.Icons.CONTENT_COPY_ROUNDED,
+            icon_size=14,
+            icon_color=ft.Colors.WHITE24,
+            tooltip="コピー",
+            on_click=self._on_copy,
+            width=28,
+            height=28,
+        )
+
         super().__init__(
             content=ft.Row(
                 [
@@ -70,6 +80,10 @@ class ChatMessage(ft.Container):
                         [self.text_control, self.md_control],
                         expand=True,
                         spacing=0,
+                    ),
+                    ft.Column(
+                        [self.copy_button],
+                        horizontal_alignment=ft.CrossAxisAlignment.END,
                     ),
                 ],
                 vertical_alignment=ft.CrossAxisAlignment.START,
@@ -80,6 +94,27 @@ class ChatMessage(ft.Container):
             padding=ft.padding.all(12),
             margin=ft.margin.only(bottom=4),
         )
+
+    def _on_copy(self, e) -> None:
+        if self.page and self._content:
+            self.page.set_clipboard(self._content)
+            # Brief visual feedback
+            self.copy_button.icon = ft.Icons.CHECK_ROUNDED
+            self.copy_button.icon_color = ft.Colors.GREEN_400
+            self.page.update()
+
+            import threading
+            def reset_icon():
+                import time
+                time.sleep(1)
+                self.copy_button.icon = ft.Icons.CONTENT_COPY_ROUNDED
+                self.copy_button.icon_color = ft.Colors.WHITE24
+                try:
+                    if self.page:
+                        self.page.update()
+                except Exception:
+                    pass
+            threading.Thread(target=reset_icon, daemon=True).start()
 
     def append_text(self, text: str) -> None:
         self._content += text
