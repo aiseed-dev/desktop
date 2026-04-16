@@ -1,5 +1,6 @@
 """Main Flet application - Claude Code GUI."""
 
+import asyncio
 import threading
 
 import flet as ft
@@ -376,13 +377,13 @@ def create_app(page: ft.Page) -> None:
     page.on_keyboard_event = on_keyboard
 
     # Handle window close
-    def on_close(e):
+    async def on_close(e):
         cli.stop()
         file_watcher.stop()
         config.window_width = int(page.window.width or 1400)
         config.window_height = int(page.window.height or 900)
         config.save()
-        page.window.destroy()
+        await page.window.destroy()
 
     page.window.prevent_close = True
     page.window.on_event = on_close
