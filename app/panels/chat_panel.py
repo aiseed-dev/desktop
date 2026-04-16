@@ -3,18 +3,37 @@
 import flet as ft
 from typing import Optional, Callable
 
-from app.claude_cli import ClaudeCLI, StreamCallbacks, ToolUseInfo
+from app.claude_cli import ClaudeCLI, StreamCallbacks, ToolUseInfo, ResultInfo
 from app.sessions import Session, SessionManager
+
+
+TOOL_LABELS = {
+    "Read": "ファイル読取",
+    "Edit": "ファイル編集",
+    "Write": "ファイル作成",
+    "Bash": "コマンド実行",
+    "Glob": "ファイル検索",
+    "Grep": "内容検索",
+    "WebSearch": "Web検索",
+    "WebFetch": "Web取得",
+    "Agent": "サブエージェント",
+    "TodoWrite": "タスク管理",
+    "NotebookEdit": "ノートブック編集",
+}
 
 
 class ChatMessage(ft.Container):
     """A single chat message bubble."""
 
-    def __init__(self, role: str, content: str = "", is_tool: bool = False):
+    def __init__(self, role: str, content: str = "", is_tool: bool = False, is_thinking: bool = False):
         self.role = role
         self._content = content
 
-        if is_tool:
+        if is_thinking:
+            bg_color = ft.Colors.with_opacity(0.06, ft.Colors.PURPLE)
+            icon = ft.Icons.PSYCHOLOGY_ROUNDED
+            text_color = ft.Colors.PURPLE_200
+        elif is_tool:
             bg_color = ft.Colors.with_opacity(0.1, ft.Colors.ORANGE)
             icon = ft.Icons.BUILD_ROUNDED
             text_color = ft.Colors.ORANGE_200
@@ -31,7 +50,8 @@ class ChatMessage(ft.Container):
             content,
             selectable=True,
             color=text_color,
-            size=14,
+            size=13 if is_thinking else 14,
+            italic=is_thinking,
         )
 
         self.md_control = ft.Markdown(
@@ -73,6 +93,64 @@ class ChatMessage(ft.Container):
             self.text_control.visible = False
 
 
+class ToolStatusMessage(ft.Container):
+    """A tool use status indicator with spinner."""
+
+    def __init__(self, tool_name: str):
+        label = TOOL_LABELS.get(tool_name, tool_name)
+        self._label = label
+        self._detail = ""
+
+        self.label_text = ft.Text(
+            f"{label}...",
+            size=13,
+            color=ft.Colors.ORANGE_200,
+        )
+
+        self.spinner = ft.ProgressRing(
+            width=14,
+            height=14,
+            stroke_width=2,
+            color=ft.Colors.ORANGE_300,
+        )
+
+        self.done_icon = ft.Icon(
+            ft.Icons.CHECK_CIRCLE_ROUNDED,
+            size=14,
+            color=ft.Colors.GREEN_400,
+            visible=False,
+        )
+
+        super().__init__(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.BUILD_ROUNDED, size=16, color=ft.Colors.ORANGE_200),
+                    self.label_text,
+                    self.spinner,
+                    self.done_icon,
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.ORANGE),
+            border_radius=6,
+            padding=ft.padding.symmetric(horizontal=12, vertical=6),
+            margin=ft.margin.only(bottom=2),
+        )
+
+    def set_detail(self, detail: str) -> None:
+        self._detail = detail
+        self.label_text.value = f"{self._label}: {detail}"
+
+    def mark_done(self) -> None:
+        self.spinner.visible = False
+        self.done_icon.visible = True
+        if self._detail:
+            self.label_text.value = f"{self._label}: {self._detail}"
+        else:
+            self.label_text.value = self._label
+
+
 class ChatPanel(ft.Column):
     """Chat panel with message list and input."""
 
@@ -92,6 +170,8 @@ class ChatPanel(ft.Column):
 
         self.current_session_id: Optional[str] = None
         self._current_message: Optional[ChatMessage] = None
+        self._thinking_message: Optional[ChatMessage] = None
+        self._active_tools: dict[int, ToolStatusMessage] = {}
         self._page: Optional[ft.Page] = None
 
         # Message list
@@ -102,7 +182,7 @@ class ChatPanel(ft.Column):
             auto_scroll=True,
         )
 
-        # Cost display
+        # Cost / stats display
         self.cost_text = ft.Text("", size=12, color=ft.Colors.WHITE38)
 
         # Session selector
@@ -235,7 +315,7 @@ class ChatPanel(ft.Column):
         ]
         self._safe_update()
 
-    def _on_session_selected(self, e: ft.ControlEvent) -> None:
+    def _on_session_selected(self, e) -> None:
         sid = e.control.value
         if sid:
             self.current_session_id = sid
@@ -245,7 +325,7 @@ class ChatPanel(ft.Column):
                 self._add_system_message(f"セッション復元: {session.name}")
             self._safe_update()
 
-    def _on_new_session(self, e: ft.ControlEvent) -> None:
+    def _on_new_session(self, e) -> None:
         self.current_session_id = None
         self.message_list.controls.clear()
         self.session_dropdown.value = None
@@ -270,8 +350,10 @@ class ChatPanel(ft.Column):
         user_msg = ChatMessage("user", message)
         self.message_list.controls.append(user_msg)
 
-        # Clear input
+        # Clear input and state
         self.input_field.value = ""
+        self._thinking_message = None
+        self._active_tools.clear()
 
         # Show assistant placeholder
         self._current_message = ChatMessage("assistant", "")
@@ -285,7 +367,9 @@ class ChatPanel(ft.Column):
 
         callbacks = StreamCallbacks(
             on_token=self._on_token,
-            on_tool_use=self._on_tool_use,
+            on_thinking=self._on_thinking,
+            on_tool_start=self._on_tool_start,
+            on_tool_end=self._on_tool_end,
             on_complete=self._on_complete,
             on_error=self._on_error,
             on_session_init=self._on_session_init,
@@ -308,59 +392,103 @@ class ChatPanel(ft.Column):
         self._finish_response()
 
     def _on_token(self, text: str) -> None:
+        # End thinking display when real text starts
+        if self._thinking_message:
+            self._thinking_message = None
+
         if self._current_message:
             self._current_message.append_text(text)
             self._safe_update()
 
-    def _on_tool_use(self, info: ToolUseInfo) -> None:
-        tool_labels = {
-            "Read": "ファイル読取",
-            "Edit": "ファイル編集",
-            "Write": "ファイル作成",
-            "Bash": "コマンド実行",
-            "Glob": "ファイル検索",
-            "Grep": "内容検索",
-            "WebSearch": "Web検索",
-            "WebFetch": "Web取得",
-        }
-        label = tool_labels.get(info.tool_name, info.tool_name)
-        detail = ""
-        inp = info.tool_input
-        if "file_path" in inp:
-            detail = f": {inp['file_path']}"
-        elif "command" in inp:
-            cmd = inp["command"]
-            detail = f": {cmd[:60]}{'...' if len(cmd) > 60 else ''}"
-        elif "pattern" in inp:
-            detail = f": {inp['pattern']}"
+    def _on_thinking(self, text: str) -> None:
+        if self._thinking_message is None:
+            self._thinking_message = ChatMessage("assistant", "", is_thinking=True)
+            self.message_list.controls.append(self._thinking_message)
 
-        tool_msg = ChatMessage("tool", f"{label}{detail}", is_tool=True)
-        self.message_list.controls.append(tool_msg)
+        self._thinking_message.append_text(text)
+        self.status_text.value = "思考中..."
         self._safe_update()
 
-    def _on_complete(self, text: str, cost: Optional[float], session_id: str) -> None:
-        if self._current_message:
-            if not self._current_message._content and text:
-                self._current_message.append_text(text)
+    def _on_tool_start(self, info: ToolUseInfo) -> None:
+        # Finalize current text message before tool display
+        if self._current_message and self._current_message._content:
             self._current_message.finalize_as_markdown()
+            self._current_message = ChatMessage("assistant", "")
+            self.message_list.controls.append(self._current_message)
+
+        tool_status = ToolStatusMessage(info.tool_name)
+
+        # Try to show detail from tool input (name, path, etc.)
+        inp = info.tool_input
+        if "file_path" in inp:
+            tool_status.set_detail(inp["file_path"])
+        elif "command" in inp:
+            cmd = inp["command"]
+            tool_status.set_detail(cmd[:60] + ("..." if len(cmd) > 60 else ""))
+        elif "pattern" in inp:
+            tool_status.set_detail(inp["pattern"])
+
+        # Track by a simple incrementing key since index resets
+        idx = len(self._active_tools)
+        self._active_tools[idx] = tool_status
+        self.message_list.controls.append(tool_status)
+
+        self.status_text.value = f"ツール実行中: {TOOL_LABELS.get(info.tool_name, info.tool_name)}"
+        self._safe_update()
+
+    def _on_tool_end(self, index: int) -> None:
+        # Mark the most recent active tool as done
+        if self._active_tools:
+            last_key = max(self._active_tools.keys())
+            tool_status = self._active_tools.get(last_key)
+            if tool_status:
+                tool_status.mark_done()
+                del self._active_tools[last_key]
+
+        self.status_text.value = "応答中..."
+        self._safe_update()
+
+    def _on_complete(self, result: ResultInfo) -> None:
+        if self._current_message:
+            if not self._current_message._content and result.text:
+                self._current_message.append_text(result.text)
+            self._current_message.finalize_as_markdown()
+
+        # Mark remaining tools as done
+        for tool_status in self._active_tools.values():
+            tool_status.mark_done()
+        self._active_tools.clear()
+
+        session_id = result.session_id
 
         if session_id and session_id != self.current_session_id:
             self.current_session_id = session_id
-            short_text = text[:50] if text else "会話"
+            short_text = result.text[:50] if result.text else "会話"
             session = Session(
                 session_id=session_id,
                 name=short_text,
                 project_dir=self.get_project_dir(),
-                total_cost=cost or 0.0,
+                total_cost=result.cost_usd or 0.0,
                 last_message=short_text,
             )
             self.session_manager.add(session)
             self._refresh_session_list()
             self.session_dropdown.value = session_id
 
-        if cost is not None:
-            self.cost_text.value = f"コスト: ${cost:.4f}"
-            self.session_manager.update(session_id, cost=cost)
+        # Build stats display
+        stats_parts = []
+        if result.cost_usd is not None:
+            stats_parts.append(f"${result.cost_usd:.4f}")
+        if result.input_tokens or result.output_tokens:
+            stats_parts.append(f"in:{result.input_tokens} out:{result.output_tokens}")
+        if result.duration_ms:
+            secs = result.duration_ms / 1000
+            stats_parts.append(f"{secs:.1f}s")
+
+        self.cost_text.value = " | ".join(stats_parts) if stats_parts else ""
+
+        if result.cost_usd is not None:
+            self.session_manager.update(session_id, cost=result.cost_usd)
 
         self.status_text.value = "完了"
         self._finish_response()
@@ -376,6 +504,7 @@ class ChatPanel(ft.Column):
 
     def _finish_response(self) -> None:
         self._current_message = None
+        self._thinking_message = None
         self.send_button.visible = True
         self.stop_button.visible = False
         self._safe_update()
