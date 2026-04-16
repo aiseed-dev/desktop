@@ -431,9 +431,15 @@ def create_app(page: ft.Page) -> None:
 
     page.add(main_content)
 
-    # Explicitly refresh panels after mount (did_mount may not fire reliably)
-    file_panel.refresh_tree()
-    image_panel.refresh_images()
+    # Defer panel refresh to ensure page is fully rendered
+    import asyncio
+
+    async def _deferred_refresh():
+        await asyncio.sleep(0.3)
+        file_panel.refresh_tree()
+        image_panel.refresh_images()
+
+    page.run_task(_deferred_refresh)
 
     # Keyboard shortcuts: Ctrl+S to save, Ctrl+E to toggle Chat/Editor
     def on_keyboard(e: ft.KeyboardEvent):
