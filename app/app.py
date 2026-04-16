@@ -431,6 +431,10 @@ def create_app(page: ft.Page) -> None:
 
     page.add(main_content)
 
+    # Explicitly refresh panels after mount (did_mount may not fire reliably)
+    file_panel.refresh_tree()
+    image_panel.refresh_images()
+
     # Keyboard shortcuts: Ctrl+S to save, Ctrl+E to toggle Chat/Editor
     def on_keyboard(e: ft.KeyboardEvent):
         if e.ctrl and e.key == "S":
