@@ -63,6 +63,7 @@ class FilePanel(ft.Column):
         self.on_file_select = on_file_select
         self.on_path_insert = on_path_insert
         self._git_modified: Set[str] = set()
+        self._expanded_dirs: Set[str] = set()  # Track which dirs are open
 
         # File tree
         self.tree_view = ft.ListView(
@@ -169,14 +170,6 @@ class FilePanel(ft.Column):
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
 
-    @staticmethod
-    def _on_item_hover(e, container: ft.Container) -> None:
-        if e.data == "true":
-            container.bgcolor = ft.Colors.with_opacity(0.08, ft.Colors.WHITE)
-        else:
-            container.bgcolor = ft.Colors.with_opacity(0.0, ft.Colors.WHITE)
-        container.update()
-
     def _build_tree(self, dir_path: str, controls: list, depth: int) -> None:
         try:
             entries = sorted(os.scandir(dir_path), key=lambda e: (not e.is_dir(), e.name.lower()))
@@ -198,18 +191,34 @@ class FilePanel(ft.Column):
                 self._add_file_node(entry, controls, depth, rel_path, is_modified)
 
     def _add_dir_node(self, entry, controls: list, depth: int, is_modified: bool) -> None:
-        children_container = ft.Column(visible=False, spacing=0)
+        dir_path = entry.path
+        is_expanded = dir_path in self._expanded_dirs
+
+        children_container = ft.Column(visible=is_expanded, spacing=0)
+
+        # Pre-build children if already expanded
+        if is_expanded:
+            self._build_tree(dir_path, children_container.controls, depth + 1)
 
         def toggle_dir(e):
-            if not children_container.controls:
-                self._build_tree(entry.path, children_container.controls, depth + 1)
-            children_container.visible = not children_container.visible
+            if dir_path in self._expanded_dirs:
+                self._expanded_dirs.discard(dir_path)
+                children_container.visible = False
+                children_container.controls.clear()
+            else:
+                self._expanded_dirs.add(dir_path)
+                children_container.controls.clear()
+                self._build_tree(dir_path, children_container.controls, depth + 1)
+                children_container.visible = True
             icon_btn.icon = ft.Icons.FOLDER_OPEN_ROUNDED if children_container.visible else ft.Icons.FOLDER_ROUNDED
             arrow.icon = ft.Icons.EXPAND_MORE_ROUNDED if children_container.visible else ft.Icons.CHEVRON_RIGHT_ROUNDED
             self._safe_update()
 
-        arrow = ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, size=14, color=ft.Colors.WHITE38)
-        icon_btn = ft.Icon(ft.Icons.FOLDER_ROUNDED, size=16, color=ft.Colors.AMBER_400)
+        arrow_icon = ft.Icons.EXPAND_MORE_ROUNDED if is_expanded else ft.Icons.CHEVRON_RIGHT_ROUNDED
+        folder_icon = ft.Icons.FOLDER_OPEN_ROUNDED if is_expanded else ft.Icons.FOLDER_ROUNDED
+
+        arrow = ft.Icon(arrow_icon, size=14, color=ft.Colors.WHITE38)
+        icon_btn = ft.Icon(folder_icon, size=16, color=ft.Colors.AMBER_400)
 
         name_text = ft.Text(
             entry.name,
@@ -227,11 +236,8 @@ class FilePanel(ft.Column):
             padding=ft.padding.only(left=depth * 16 + 4, top=6, bottom=6, right=8),
             on_click=toggle_dir,
             on_long_press=lambda e, path=entry.path, name=entry.name: self._show_context_menu(path, name, is_dir=True),
-            ink=True,
             border_radius=4,
-            bgcolor=ft.Colors.with_opacity(0.0, ft.Colors.WHITE),
         )
-        row.on_hover = lambda e, c=row: self._on_item_hover(e, c)
 
         controls.append(row)
         controls.append(children_container)
@@ -273,11 +279,8 @@ class FilePanel(ft.Column):
             padding=ft.padding.only(left=depth * 16 + 4, top=5, bottom=5, right=8),
             on_click=on_click,
             on_long_press=lambda e, path=entry.path, name=entry.name: self._show_context_menu(path, name, is_dir=False),
-            ink=True,
             border_radius=4,
-            bgcolor=ft.Colors.with_opacity(0.0, ft.Colors.WHITE),
         )
-        row.on_hover = lambda e, c=row: self._on_item_hover(e, c)
 
         controls.append(row)
 
