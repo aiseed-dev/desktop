@@ -69,14 +69,10 @@ class ClaudeCLI:
             "claude", "-p",
             "--output-format", "stream-json",
             "--verbose",
-            "--include-partial-messages",
         ]
 
         if model:
             cmd.extend(["--model", model])
-
-        if project_dir:
-            cmd.extend(["--cwd", project_dir])
 
         if session_id:
             cmd.extend(["--resume", session_id])
@@ -90,6 +86,7 @@ class ClaudeCLI:
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
+                cwd=project_dir or None,
             )
         except FileNotFoundError:
             callbacks.on_error("Claude Code CLI が見つかりません。インストールしてください。")
