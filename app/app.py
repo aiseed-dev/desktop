@@ -226,7 +226,7 @@ def create_app(page: ft.Page) -> None:
 
     # Folder picker
     folder_picker = ft.FilePicker()
-    page.services.register_service(folder_picker)
+    page.services.append(folder_picker)
 
     async def pick_folder(e):
         result = await folder_picker.get_directory_path(

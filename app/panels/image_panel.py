@@ -154,7 +154,7 @@ class ImagePanel(ft.Column):
             return
 
         fp = ft.FilePicker()
-        self.page.services.register_service(fp)
+        self.page.services.append(fp)
         files = await fp.pick_files(
             allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
             allow_multiple=True,
