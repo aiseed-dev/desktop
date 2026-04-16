@@ -6,7 +6,7 @@ from app.app import create_app
 
 
 def main():
-    ft.app(target=create_app)
+    ft.run(create_app)
 
 
 if __name__ == "__main__":
