@@ -153,15 +153,51 @@ class ImagePanel(ft.Column):
         if not self.page:
             return
 
-        fp = ft.FilePicker()
-        self.page.services.append(fp)
-        files = await fp.pick_files(
-            allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
-            allow_multiple=True,
-            dialog_title="画像を追加",
+        try:
+            fp = ft.FilePicker()
+            self.page.services.append(fp)
+            files = await fp.pick_files(
+                allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
+                allow_multiple=True,
+                dialog_title="画像を追加",
+            )
+            if files:
+                self._import_files(files)
+        except Exception:
+            # Fallback: text input for image path (e.g. when Zenity is not installed on Linux)
+            self._show_image_path_dialog()
+
+    def _show_image_path_dialog(self) -> None:
+        if not self.page:
+            return
+
+        path_field = ft.TextField(
+            hint_text="画像ファイルのパス (例: /home/user/photo.png)",
+            autofocus=True,
+            expand=True,
         )
-        if files:
-            self._import_files(files)
+
+        def submit(e):
+            val = (path_field.value or "").strip()
+            if val and os.path.isfile(val):
+                self.page.pop_dialog()
+
+                class FakeFile:
+                    def __init__(self, p):
+                        self.path = p
+                self._import_files([FakeFile(val)])
+
+        path_field.on_submit = submit
+
+        dialog = ft.AlertDialog(
+            title=ft.Text("画像ファイルのパスを入力"),
+            content=ft.Container(path_field, width=500),
+            actions=[
+                ft.TextButton("キャンセル", on_click=lambda e: self.page.pop_dialog()),
+                ft.ElevatedButton("追加", on_click=submit),
+            ],
+        )
+        self.page.show_dialog(dialog)
 
     def _import_files(self, files: list) -> None:
         image_dir = self._get_full_image_dir()

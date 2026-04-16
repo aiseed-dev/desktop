@@ -224,22 +224,55 @@ def create_app(page: ft.Page) -> None:
         start_watcher()
         page.update()
 
-    # Folder picker
+    # Folder picker - use native dialog if available, fallback to text input
     folder_picker = ft.FilePicker()
     page.services.append(folder_picker)
 
+    def _apply_project_dir(path: str) -> None:
+        config.project_dir = path
+        config.save()
+        project_dir_text.value = path
+        file_panel.refresh_tree()
+        image_panel.refresh_images()
+        start_watcher()
+        page.update()
+
     async def pick_folder(e):
-        result = await folder_picker.get_directory_path(
-            dialog_title="プロジェクトディレクトリを選択"
+        try:
+            result = await folder_picker.get_directory_path(
+                dialog_title="プロジェクトディレクトリを選択"
+            )
+            if result:
+                _apply_project_dir(result)
+        except Exception:
+            # Fallback: text input dialog (e.g. when Zenity is not installed on Linux)
+            _show_folder_input_dialog()
+
+    def _show_folder_input_dialog():
+        path_field = ft.TextField(
+            value=config.project_dir,
+            hint_text="/home/user/my-project",
+            autofocus=True,
+            expand=True,
         )
-        if result:
-            config.project_dir = result
-            config.save()
-            project_dir_text.value = result
-            file_panel.refresh_tree()
-            image_panel.refresh_images()
-            start_watcher()
-            page.update()
+
+        def submit(e):
+            val = (path_field.value or "").strip()
+            if val:
+                page.pop_dialog()
+                _apply_project_dir(val)
+
+        path_field.on_submit = submit
+
+        dialog = ft.AlertDialog(
+            title=ft.Text("プロジェクトディレクトリを入力"),
+            content=ft.Container(path_field, width=500),
+            actions=[
+                ft.TextButton("キャンセル", on_click=lambda e: page.pop_dialog()),
+                ft.ElevatedButton("開く", on_click=submit),
+            ],
+        )
+        page.show_dialog(dialog)
 
     # Top bar
     project_dir_text = ft.Text(
