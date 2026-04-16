@@ -1,4 +1,4 @@
-"""Image Panel - Image management and Claude integration."""
+"""Image Panel - Image management, resize, WebP conversion and Claude integration."""
 
 import os
 import shutil
@@ -8,20 +8,83 @@ from typing import Callable, Optional
 
 import flet as ft
 
+try:
+    from PIL import Image as PILImage
+    HAS_PILLOW = True
+except ImportError:
+    HAS_PILLOW = False
+
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".tiff"}
 
 
+def resize_and_convert(
+    src_path: str,
+    dst_path: str,
+    max_width: int = 1200,
+    fmt: str = "webp",
+    quality: int = 85,
+) -> str:
+    """Resize image to max_width and convert to target format. Returns output path."""
+    if not HAS_PILLOW:
+        shutil.copy2(src_path, dst_path)
+        return dst_path
+
+    img = PILImage.open(src_path)
+
+    # Convert RGBA to RGB for JPEG
+    if fmt in ("jpg", "jpeg") and img.mode == "RGBA":
+        bg = PILImage.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[3])
+        img = bg
+
+    # Resize if wider than max_width
+    if img.width > max_width:
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+        img = img.resize((max_width, new_height), PILImage.LANCZOS)
+
+    # Determine output path with correct extension
+    ext_map = {"webp": ".webp", "png": ".png", "jpg": ".jpg", "jpeg": ".jpg"}
+    target_ext = ext_map.get(fmt, f".{fmt}")
+    stem = Path(dst_path).stem
+    out_path = str(Path(dst_path).with_name(stem + target_ext))
+
+    save_fmt = fmt.upper()
+    if save_fmt == "JPG":
+        save_fmt = "JPEG"
+
+    img.save(out_path, format=save_fmt, quality=quality)
+    return out_path
+
+
+def get_image_info(path: str) -> str:
+    """Get image dimensions and file size."""
+    try:
+        size_kb = os.path.getsize(path) / 1024
+        if HAS_PILLOW:
+            img = PILImage.open(path)
+            return f"{img.width}x{img.height} | {size_kb:.0f} KB"
+        else:
+            return f"{size_kb:.0f} KB"
+    except Exception:
+        return ""
+
+
 class ImagePanel(ft.Column):
-    """Image management panel with thumbnails and drag-drop support."""
+    """Image management panel with thumbnails, resize, and WebP conversion."""
 
     def __init__(
         self,
         get_project_dir: Callable[[], str],
         get_image_dir: Callable[[], str],
+        get_max_width: Callable[[], int],
+        get_image_format: Callable[[], str],
         on_image_insert: Optional[Callable[[str], None]] = None,
     ):
         self.get_project_dir = get_project_dir
         self.get_image_dir = get_image_dir
+        self.get_max_width = get_max_width
+        self.get_image_format = get_image_format
         self.on_image_insert = on_image_insert
 
         # Thumbnail grid
@@ -41,8 +104,15 @@ class ImagePanel(ft.Column):
                     icon=ft.Icons.ADD_PHOTO_ALTERNATE_ROUNDED,
                     icon_size=18,
                     icon_color=ft.Colors.WHITE54,
-                    tooltip="画像を追加",
+                    tooltip="画像を追加（リサイズ＆変換）",
                     on_click=self._on_add_image,
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.PHOTO_SIZE_SELECT_LARGE_ROUNDED,
+                    icon_size=18,
+                    icon_color=ft.Colors.WHITE54,
+                    tooltip="全画像を一括リサイズ＆変換",
+                    on_click=self._on_batch_convert,
                 ),
                 ft.IconButton(
                     icon=ft.Icons.REFRESH_ROUNDED,
@@ -54,7 +124,7 @@ class ImagePanel(ft.Column):
             ],
             alignment=ft.MainAxisAlignment.START,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=4,
+            spacing=2,
         )
 
         super().__init__(
@@ -106,15 +176,78 @@ class ImagePanel(ft.Column):
             return
 
         os.makedirs(image_dir, exist_ok=True)
+        max_width = self.get_max_width()
+        fmt = self.get_image_format()
 
         for f in files:
             src = f.path
-            if src:
-                dst = os.path.join(image_dir, os.path.basename(src))
+            if not src:
+                continue
+
+            dst = os.path.join(image_dir, os.path.basename(src))
+
+            # Skip SVG (can't be processed by Pillow)
+            if Path(src).suffix.lower() == ".svg":
                 try:
                     shutil.copy2(src, dst)
                 except (shutil.SameFileError, OSError):
                     pass
+                continue
+
+            try:
+                resize_and_convert(src, dst, max_width=max_width, fmt=fmt)
+            except Exception:
+                # Fallback: just copy
+                try:
+                    shutil.copy2(src, dst)
+                except (shutil.SameFileError, OSError):
+                    pass
+
+        self.refresh_images()
+
+    def _on_batch_convert(self, e) -> None:
+        """Convert all images in the image directory to the configured format."""
+        if not HAS_PILLOW:
+            if self.page:
+                self.page.show_dialog(ft.AlertDialog(
+                    title=ft.Text("エラー"),
+                    content=ft.Text("Pillow がインストールされていません。\npip install Pillow"),
+                ))
+            return
+
+        image_dir = self._get_full_image_dir()
+        if not image_dir or not os.path.isdir(image_dir):
+            return
+
+        max_width = self.get_max_width()
+        fmt = self.get_image_format()
+        converted = 0
+
+        for entry in os.scandir(image_dir):
+            if not entry.is_file():
+                continue
+            ext = Path(entry.name).suffix.lower()
+            if ext not in IMAGE_EXTENSIONS or ext == ".svg":
+                continue
+
+            target_ext = {"webp": ".webp", "png": ".png", "jpg": ".jpg", "jpeg": ".jpg"}.get(fmt, f".{fmt}")
+            if ext == target_ext:
+                # Check if resize needed
+                try:
+                    img = PILImage.open(entry.path)
+                    if img.width <= max_width:
+                        continue
+                except Exception:
+                    continue
+
+            try:
+                out_path = resize_and_convert(entry.path, entry.path, max_width=max_width, fmt=fmt)
+                # Remove original if extension changed
+                if out_path != entry.path and os.path.exists(entry.path):
+                    os.remove(entry.path)
+                converted += 1
+            except Exception:
+                pass
 
         self.refresh_images()
 
@@ -160,13 +293,14 @@ class ImagePanel(ft.Column):
 
         for entry in images:
             rel_path = os.path.relpath(entry.path, project_dir)
+            info = get_image_info(entry.path)
             self.image_grid.controls.append(
-                self._create_image_tile(entry.path, entry.name, rel_path)
+                self._create_image_tile(entry.path, entry.name, rel_path, info)
             )
 
         self._safe_update()
 
-    def _create_image_tile(self, abs_path: str, name: str, rel_path: str) -> ft.Container:
+    def _create_image_tile(self, abs_path: str, name: str, rel_path: str, info: str) -> ft.Container:
         def on_click(e):
             if self.on_image_insert:
                 self.on_image_insert(f"この画像を見て: {abs_path}")
@@ -199,7 +333,14 @@ class ImagePanel(ft.Column):
                     thumbnail,
                     ft.Row(
                         [
-                            ft.Text(name, size=11, color=ft.Colors.WHITE54, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Column(
+                                [
+                                    ft.Text(name, size=11, color=ft.Colors.WHITE54, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                    ft.Text(info, size=9, color=ft.Colors.WHITE24) if info else ft.Container(),
+                                ],
+                                spacing=0,
+                                expand=True,
+                            ),
                             ft.IconButton(
                                 icon=ft.Icons.CONTENT_COPY_ROUNDED,
                                 icon_size=14,

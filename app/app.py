@@ -6,6 +6,7 @@ import flet as ft
 
 from app.claude_cli import ClaudeCLI
 from app.config import AppConfig
+from app.file_watcher import FileWatcher
 from app.sessions import SessionManager
 from app.panels.chat_panel import ChatPanel
 from app.panels.file_panel import FilePanel
@@ -131,6 +132,7 @@ def create_app(page: ft.Page) -> None:
     # Core services
     cli = ClaudeCLI()
     session_manager = SessionManager()
+    file_watcher = FileWatcher()
 
     # Getters
     def get_project_dir() -> str:
@@ -141,6 +143,12 @@ def create_app(page: ft.Page) -> None:
 
     def get_image_dir() -> str:
         return config.image_dir
+
+    def get_max_width() -> int:
+        return config.image_max_width
+
+    def get_image_format() -> str:
+        return config.image_format
 
     def get_build_command() -> str:
         return config.build_command
@@ -177,8 +185,33 @@ def create_app(page: ft.Page) -> None:
     image_panel = ImagePanel(
         get_project_dir=get_project_dir,
         get_image_dir=get_image_dir,
+        get_max_width=get_max_width,
+        get_image_format=get_image_format,
         on_image_insert=lambda text: chat_panel.insert_text(text),
     )
+
+    # File watcher callbacks
+    def on_file_changed(changed_path: str):
+        """Called by watchdog when a file changes in the project directory."""
+        file_panel.refresh_tree()
+        # Auto-reload preview if the changed file is currently displayed
+        if preview_panel._current_file == changed_path:
+            if not preview_panel._is_edit_mode or not preview_panel._is_dirty:
+                preview_panel.load_file(changed_path)
+        # Refresh images if change is in image dir
+        image_dir = image_panel._get_full_image_dir()
+        if image_dir and changed_path.startswith(image_dir):
+            image_panel.refresh_images()
+
+    file_watcher.add_callback(on_file_changed)
+
+    # Start watcher if project dir is set
+    def start_watcher():
+        project_dir = get_project_dir()
+        if project_dir:
+            file_watcher.start(project_dir)
+
+    start_watcher()
 
     # Settings dialog
     def open_settings(e):
@@ -189,6 +222,8 @@ def create_app(page: ft.Page) -> None:
         file_panel.refresh_tree()
         image_panel.refresh_images()
         chat_panel.model_dropdown.value = config.model
+        # Restart watcher with new project dir
+        start_watcher()
         page.update()
 
     # Folder picker
@@ -206,6 +241,7 @@ def create_app(page: ft.Page) -> None:
                 project_dir_text.value = result
                 file_panel.refresh_tree()
                 image_panel.refresh_images()
+                start_watcher()
                 page.update()
 
         threading.Thread(target=do_pick, daemon=True).start()
@@ -250,7 +286,7 @@ def create_app(page: ft.Page) -> None:
         padding=ft.padding.symmetric(horizontal=12, vertical=6),
     )
 
-    # Bottom panel - manual tab switching (Flet 0.84 Tabs API changed)
+    # Bottom panel - manual tab switching
     bottom_tab_content = ft.Container(expand=True)
     bottom_tab_content.content = preview_panel
 
@@ -264,7 +300,7 @@ def create_app(page: ft.Page) -> None:
     bottom_tab_bar = ft.Row(
         [
             ft.TextButton(
-                "Preview",
+                "Preview / Editor",
                 icon=ft.Icons.PREVIEW_ROUNDED,
                 on_click=lambda e: switch_bottom_tab(0),
             ),
@@ -318,7 +354,7 @@ def create_app(page: ft.Page) -> None:
                 spacing=0,
                 vertical_alignment=ft.CrossAxisAlignment.STRETCH,
             ),
-            # Bottom: Preview / Build
+            # Bottom: Preview/Editor / Build
             ft.Container(
                 bottom_panel,
                 height=250,
@@ -332,9 +368,17 @@ def create_app(page: ft.Page) -> None:
 
     page.add(main_content)
 
+    # Keyboard shortcut: Ctrl+S to save
+    def on_keyboard(e: ft.KeyboardEvent):
+        if e.ctrl and e.key == "S":
+            preview_panel.save_current()
+
+    page.on_keyboard_event = on_keyboard
+
     # Handle window close
     def on_close(e):
         cli.stop()
+        file_watcher.stop()
         config.window_width = int(page.window.width or 1400)
         config.window_height = int(page.window.height or 900)
         config.save()

@@ -49,6 +49,7 @@ class ClaudeCLI:
             "claude", "-p",
             "--output-format", "stream-json",
             "--verbose",
+            "--include-partial-messages",
         ]
 
         if model:
@@ -109,6 +110,15 @@ class ClaudeCLI:
                         text = delta.get("text", "")
                         if text:
                             callbacks.on_token(text)
+
+                elif msg_type == "stream_event":
+                    event = data.get("event", {})
+                    if event.get("type") == "content_block_delta":
+                        delta = event.get("delta", {})
+                        if delta.get("type") == "text_delta":
+                            text = delta.get("text", "")
+                            if text:
+                                callbacks.on_token(text)
 
                 elif msg_type == "assistant":
                     msg = data.get("message", {})

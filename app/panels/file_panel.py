@@ -1,6 +1,7 @@
 """File Panel - Project file browser and management."""
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Callable, Optional, Set
@@ -70,12 +71,26 @@ class FilePanel(ft.Column):
             padding=ft.padding.only(left=4),
         )
 
-        # Header with refresh button
+        # Header with action buttons
         header = ft.Row(
             [
                 ft.Icon(ft.Icons.FOLDER_OPEN_ROUNDED, color=ft.Colors.AMBER_400, size=20),
                 ft.Text("Files", size=16, weight=ft.FontWeight.BOLD),
                 ft.Container(expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.CREATE_NEW_FOLDER_ROUNDED,
+                    icon_size=16,
+                    icon_color=ft.Colors.WHITE54,
+                    tooltip="新規フォルダ",
+                    on_click=self._on_new_folder,
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.NOTE_ADD_ROUNDED,
+                    icon_size=16,
+                    icon_color=ft.Colors.WHITE54,
+                    tooltip="新規ファイル",
+                    on_click=self._on_new_file,
+                ),
                 ft.IconButton(
                     icon=ft.Icons.REFRESH_ROUNDED,
                     icon_size=18,
@@ -86,7 +101,7 @@ class FilePanel(ft.Column):
             ],
             alignment=ft.MainAxisAlignment.START,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=8,
+            spacing=2,
         )
 
         super().__init__(
@@ -200,6 +215,7 @@ class FilePanel(ft.Column):
             ),
             padding=ft.padding.only(left=depth * 16 + 4, top=2, bottom=2, right=4),
             on_click=toggle_dir,
+            on_long_press=lambda e, path=entry.path, name=entry.name: self._show_context_menu(path, name, is_dir=True),
             ink=True,
             border_radius=4,
         )
@@ -225,7 +241,7 @@ class FilePanel(ft.Column):
             ft.Row(
                 [
                     ft.Icon(icon, size=16, color=ft.Colors.WHITE38),
-                    ft.Text(entry.name, size=13, color=name_color, expand=True),
+                    ft.Text(entry.name, size=13, color=name_color, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                     mod_indicator,
                     ft.IconButton(
                         icon=ft.Icons.CONTENT_COPY_ROUNDED,
@@ -242,8 +258,184 @@ class FilePanel(ft.Column):
             ),
             padding=ft.padding.only(left=depth * 16 + 4, top=1, bottom=1, right=4),
             on_click=on_click,
+            on_long_press=lambda e, path=entry.path, name=entry.name: self._show_context_menu(path, name, is_dir=False),
             ink=True,
             border_radius=4,
         )
 
         controls.append(row)
+
+    # --- File operations ---
+
+    def _on_new_file(self, e=None) -> None:
+        project_dir = self.get_project_dir()
+        if not project_dir:
+            return
+        self._show_name_dialog(
+            title="新規ファイル",
+            hint="ファイル名 (例: src/main.py)",
+            on_submit=lambda name: self._create_file(os.path.join(project_dir, name)),
+        )
+
+    def _on_new_folder(self, e=None) -> None:
+        project_dir = self.get_project_dir()
+        if not project_dir:
+            return
+        self._show_name_dialog(
+            title="新規フォルダ",
+            hint="フォルダ名 (例: src/utils)",
+            on_submit=lambda name: self._create_folder(os.path.join(project_dir, name)),
+        )
+
+    def _create_file(self, path: str) -> None:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            Path(path).touch()
+            self.refresh_tree()
+            if self.on_file_select:
+                self.on_file_select(path)
+        except OSError as e:
+            self._show_error(f"ファイル作成に失敗: {e}")
+
+    def _create_folder(self, path: str) -> None:
+        try:
+            os.makedirs(path, exist_ok=True)
+            self.refresh_tree()
+        except OSError as e:
+            self._show_error(f"フォルダ作成に失敗: {e}")
+
+    def _rename_item(self, old_path: str, new_name: str) -> None:
+        new_path = os.path.join(os.path.dirname(old_path), new_name)
+        try:
+            os.rename(old_path, new_path)
+            self.refresh_tree()
+        except OSError as e:
+            self._show_error(f"リネームに失敗: {e}")
+
+    def _delete_item(self, path: str, is_dir: bool) -> None:
+        try:
+            if is_dir:
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+            self.refresh_tree()
+        except OSError as e:
+            self._show_error(f"削除に失敗: {e}")
+
+    def _show_context_menu(self, path: str, name: str, is_dir: bool) -> None:
+        if not self.page:
+            return
+
+        def on_rename(e):
+            self.page.pop_dialog()
+            self._show_name_dialog(
+                title="リネーム",
+                hint="新しい名前",
+                initial_value=name,
+                on_submit=lambda new_name: self._rename_item(path, new_name),
+            )
+
+        def on_delete(e):
+            self.page.pop_dialog()
+            self._show_confirm_dialog(
+                title="削除確認",
+                message=f"「{name}」を削除しますか？\nこの操作は取り消せません。",
+                on_confirm=lambda: self._delete_item(path, is_dir),
+            )
+
+        def on_copy_path(e):
+            self.page.pop_dialog()
+            if self.on_path_insert:
+                project_dir = self.get_project_dir()
+                rel = os.path.relpath(path, project_dir)
+                self.on_path_insert(rel)
+
+        dialog = ft.AlertDialog(
+            title=ft.Text(name, size=14),
+            content=ft.Column(
+                [
+                    ft.TextButton(
+                        "リネーム",
+                        icon=ft.Icons.DRIVE_FILE_RENAME_OUTLINE,
+                        on_click=on_rename,
+                    ),
+                    ft.TextButton(
+                        "削除",
+                        icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
+                        on_click=on_delete,
+                        style=ft.ButtonStyle(color=ft.Colors.RED_400),
+                    ),
+                    ft.TextButton(
+                        "パスをChatに挿入",
+                        icon=ft.Icons.CONTENT_COPY_ROUNDED,
+                        on_click=on_copy_path,
+                    ),
+                ],
+                tight=True,
+                spacing=0,
+            ),
+            actions=[ft.TextButton("閉じる", on_click=lambda e: self.page.pop_dialog())],
+        )
+        self.page.show_dialog(dialog)
+
+    def _show_name_dialog(self, title: str, hint: str, on_submit: Callable, initial_value: str = "") -> None:
+        if not self.page:
+            return
+
+        name_field = ft.TextField(
+            value=initial_value,
+            hint_text=hint,
+            autofocus=True,
+            expand=True,
+        )
+
+        def submit(e):
+            val = name_field.value.strip()
+            if val:
+                self.page.pop_dialog()
+                on_submit(val)
+
+        name_field.on_submit = submit
+
+        dialog = ft.AlertDialog(
+            title=ft.Text(title),
+            content=ft.Container(name_field, width=400),
+            actions=[
+                ft.TextButton("キャンセル", on_click=lambda e: self.page.pop_dialog()),
+                ft.ElevatedButton("作成", on_click=submit),
+            ],
+        )
+        self.page.show_dialog(dialog)
+
+    def _show_confirm_dialog(self, title: str, message: str, on_confirm: Callable) -> None:
+        if not self.page:
+            return
+
+        def confirm(e):
+            self.page.pop_dialog()
+            on_confirm()
+
+        dialog = ft.AlertDialog(
+            title=ft.Text(title),
+            content=ft.Text(message),
+            actions=[
+                ft.TextButton("キャンセル", on_click=lambda e: self.page.pop_dialog()),
+                ft.ElevatedButton(
+                    "削除",
+                    on_click=confirm,
+                    color=ft.Colors.WHITE,
+                    bgcolor=ft.Colors.RED_700,
+                ),
+            ],
+        )
+        self.page.show_dialog(dialog)
+
+    def _show_error(self, message: str) -> None:
+        if not self.page:
+            return
+        dialog = ft.AlertDialog(
+            title=ft.Text("エラー"),
+            content=ft.Text(message),
+            actions=[ft.TextButton("OK", on_click=lambda e: self.page.pop_dialog())],
+        )
+        self.page.show_dialog(dialog)
