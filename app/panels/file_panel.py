@@ -145,7 +145,7 @@ class FilePanel(ft.Column):
     def _safe_update(self) -> None:
         try:
             if self.page:
-                self.page.update()
+                self.update()
         except Exception:
             pass
 
@@ -168,6 +168,14 @@ class FilePanel(ft.Column):
                         self._git_modified.add(filepath)
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
+
+    @staticmethod
+    def _on_item_hover(e, container: ft.Container) -> None:
+        if e.data == "true":
+            container.bgcolor = ft.Colors.with_opacity(0.08, ft.Colors.WHITE)
+        else:
+            container.bgcolor = ft.Colors.with_opacity(0.0, ft.Colors.WHITE)
+        container.update()
 
     def _build_tree(self, dir_path: str, controls: list, depth: int) -> None:
         try:
@@ -197,28 +205,33 @@ class FilePanel(ft.Column):
                 self._build_tree(entry.path, children_container.controls, depth + 1)
             children_container.visible = not children_container.visible
             icon_btn.icon = ft.Icons.FOLDER_OPEN_ROUNDED if children_container.visible else ft.Icons.FOLDER_ROUNDED
+            arrow.icon = ft.Icons.EXPAND_MORE_ROUNDED if children_container.visible else ft.Icons.CHEVRON_RIGHT_ROUNDED
             self._safe_update()
 
+        arrow = ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, size=14, color=ft.Colors.WHITE38)
         icon_btn = ft.Icon(ft.Icons.FOLDER_ROUNDED, size=16, color=ft.Colors.AMBER_400)
 
         name_text = ft.Text(
             entry.name,
             size=13,
+            weight=ft.FontWeight.W_500,
             color=ft.Colors.ORANGE_300 if is_modified else ft.Colors.WHITE70,
         )
 
         row = ft.Container(
             ft.Row(
-                [icon_btn, name_text],
+                [arrow, icon_btn, name_text],
                 spacing=6,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            padding=ft.padding.only(left=depth * 16 + 4, top=2, bottom=2, right=4),
+            padding=ft.padding.only(left=depth * 16 + 4, top=6, bottom=6, right=8),
             on_click=toggle_dir,
             on_long_press=lambda e, path=entry.path, name=entry.name: self._show_context_menu(path, name, is_dir=True),
             ink=True,
             border_radius=4,
+            bgcolor=ft.Colors.with_opacity(0.0, ft.Colors.WHITE),
         )
+        row.on_hover = lambda e, c=row: self._on_item_hover(e, c)
 
         controls.append(row)
         controls.append(children_container)
@@ -240,6 +253,7 @@ class FilePanel(ft.Column):
         row = ft.Container(
             ft.Row(
                 [
+                    ft.Container(width=14),  # align with folder arrow
                     ft.Icon(icon, size=16, color=ft.Colors.WHITE38),
                     ft.Text(entry.name, size=13, color=name_color, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                     mod_indicator,
@@ -256,12 +270,14 @@ class FilePanel(ft.Column):
                 spacing=6,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            padding=ft.padding.only(left=depth * 16 + 4, top=1, bottom=1, right=4),
+            padding=ft.padding.only(left=depth * 16 + 4, top=5, bottom=5, right=8),
             on_click=on_click,
             on_long_press=lambda e, path=entry.path, name=entry.name: self._show_context_menu(path, name, is_dir=False),
             ink=True,
             border_radius=4,
+            bgcolor=ft.Colors.with_opacity(0.0, ft.Colors.WHITE),
         )
+        row.on_hover = lambda e, c=row: self._on_item_hover(e, c)
 
         controls.append(row)
 
