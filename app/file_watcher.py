@@ -23,6 +23,7 @@ class _DebouncedHandler(FileSystemEventHandler):
         self._timer: Optional[threading.Timer] = None
         self._last_path: Optional[str] = None
         self._lock = threading.Lock()
+        self._stopped = False
 
     def _should_ignore(self, path: str) -> bool:
         parts = Path(path).parts
@@ -41,6 +42,8 @@ class _DebouncedHandler(FileSystemEventHandler):
             return
 
         with self._lock:
+            if self._stopped:
+                return
             self._last_path = event.src_path
             if self._timer:
                 self._timer.cancel()
@@ -50,9 +53,18 @@ class _DebouncedHandler(FileSystemEventHandler):
 
     def _fire(self) -> None:
         with self._lock:
+            if self._stopped:
+                return
             path = self._last_path
         if path:
             self._callback(path)
+
+    def cancel(self) -> None:
+        with self._lock:
+            self._stopped = True
+            if self._timer:
+                self._timer.cancel()
+                self._timer = None
 
 
 class FileWatcher:
@@ -60,6 +72,7 @@ class FileWatcher:
 
     def __init__(self):
         self._observer: Optional[Observer] = None
+        self._handler: Optional[_DebouncedHandler] = None
         self._watch_path: Optional[str] = None
         self._on_change_callbacks: list[Callable[[str], None]] = []
 
@@ -78,17 +91,20 @@ class FileWatcher:
             "*.pyc", "*.pyo", ".DS_Store",
         }
 
-        handler = _DebouncedHandler(
+        self._handler = _DebouncedHandler(
             callback=self._on_file_changed,
             ignore_patterns=ignore,
         )
 
         self._observer = Observer()
-        self._observer.schedule(handler, path, recursive=True)
+        self._observer.schedule(self._handler, path, recursive=True)
         self._observer.daemon = True
         self._observer.start()
 
     def stop(self) -> None:
+        if self._handler:
+            self._handler.cancel()
+            self._handler = None
         if self._observer:
             self._observer.stop()
             try:

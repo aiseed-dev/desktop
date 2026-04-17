@@ -1,8 +1,9 @@
 """Build Panel - Build execution, Git operations, and deploy."""
 
+import shlex
 import subprocess
 import threading
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 import flet as ft
 
@@ -173,7 +174,7 @@ class BuildPanel(ft.Column):
         self.log_output.value = current + text + "\n"
         self._safe_update()
 
-    def _run_command(self, cmd: str, label: str = "") -> None:
+    def _run_command(self, cmd: Union[str, list[str]], label: str = "") -> None:
         project_dir = self.get_project_dir()
         if not project_dir:
             self._append_log("[ERROR] プロジェクトディレクトリが設定されていません")
@@ -183,9 +184,12 @@ class BuildPanel(ft.Column):
             self._append_log("[WARN] 別のコマンドが実行中です")
             return
 
+        use_shell = isinstance(cmd, str)
+        display = cmd if use_shell else shlex.join(cmd)
+
         if label:
             self._append_log(f"--- {label} ---")
-        self._append_log(f"$ {cmd}")
+        self._append_log(f"$ {display}")
         self.stop_btn.visible = True
         self._safe_update()
 
@@ -193,7 +197,7 @@ class BuildPanel(ft.Column):
             try:
                 self._proc = subprocess.Popen(
                     cmd,
-                    shell=True,
+                    shell=use_shell,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -229,23 +233,22 @@ class BuildPanel(ft.Column):
             self._append_log("[ERROR] デプロイコマンドが設定されていません。設定画面で設定してください。")
 
     def _on_git_status(self, e) -> None:
-        self._run_command("git status", "Git Status")
+        self._run_command(["git", "status"], "Git Status")
 
     def _on_git_add(self, e) -> None:
-        self._run_command("git add -A", "Git Add All")
+        self._run_command(["git", "add", "-A"], "Git Add All")
 
     def _on_git_commit(self, e) -> None:
         msg = self.commit_msg_input.value
         if not msg:
             self._append_log("[ERROR] コミットメッセージを入力してください")
             return
-        safe_msg = msg.replace('"', '\\"')
-        self._run_command(f'git commit -m "{safe_msg}"', "Git Commit")
+        self._run_command(["git", "commit", "-m", msg], "Git Commit")
         self.commit_msg_input.value = ""
         self._safe_update()
 
     def _on_git_push(self, e) -> None:
-        self._run_command("git push", "Git Push")
+        self._run_command(["git", "push"], "Git Push")
 
     def _on_run_custom(self, e) -> None:
         cmd = self.cmd_input.value
@@ -255,8 +258,13 @@ class BuildPanel(ft.Column):
             self._safe_update()
 
     def _on_stop(self, e) -> None:
-        if self._proc and self._proc.poll() is None:
-            self._proc.terminate()
+        proc = self._proc
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
             self._append_log("[STOPPED]")
 
     def _on_clear_log(self, e) -> None:
