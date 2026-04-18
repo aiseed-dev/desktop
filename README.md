@@ -140,6 +140,21 @@ Flet App
 AI の頭脳は全て Claude Code CLI が提供します。
 このアプリが実装するのは「表示」と「ファイル・画像の管理 UI」だけです。
 
+## 同梱ツール: aiseed_web ビルダー
+
+`aiseed_web/` は [aiseed-web](https://github.com/aiseed-dev/aiseed-web) 静的サイトの
+ビルダー。テンプレート・既定スタイル・検索スクリプト・Python ツールを同梱する。
+
+データ(content / data / images)は別リポジトリ `aiseed-web/` に置き、
+ビルド時に `--site <aiseed-web パス>` で指定する。詳細は
+[aiseed_web/README.md](./aiseed_web/README.md) 参照。
+
+```bash
+python aiseed_web/tools/build.py --site /path/to/aiseed-web
+python aiseed_web/tools/serve.py --site /path/to/aiseed-web
+python aiseed_web/tools/optimize_images.py --site /path/to/aiseed-web
+```
+
 ## ライセンス
 
 [GPL-3.0](LICENSE)

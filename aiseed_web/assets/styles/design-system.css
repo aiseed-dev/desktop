@@ -1,0 +1,45 @@
+/* aiseed design tokens — vanilla CSS Custom Properties. */
+
+:root {
+  /* Palette — earth / natural farming */
+  --color-bg: #faf8f3;
+  --color-bg-alt: #f2ede2;
+  --color-surface: #ffffff;
+  --color-text: #2a2a28;
+  --color-text-muted: #6b6b66;
+  --color-border: #e4dfd4;
+  --color-accent: #4a6b3a;        /* leaf green */
+  --color-accent-strong: #2f4a23;
+  --color-accent-soft: #dce6cf;
+  --color-danger: #b0452c;
+
+  /* Typography */
+  --font-sans: "Hiragino Sans", "Noto Sans JP", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Hiragino Mincho ProN", "Noto Serif JP", "Georgia", serif;
+
+  --text-xs: 0.78rem;
+  --text-sm: 0.9rem;
+  --text-base: 1rem;
+  --text-lg: 1.15rem;
+  --text-xl: 1.4rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --text-4xl: 3rem;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* Layout */
+  --radius: 8px;
+  --radius-lg: 14px;
+  --max-width: 1120px;
+  --max-width-narrow: 720px;
+  --line-height: 1.7;
+}

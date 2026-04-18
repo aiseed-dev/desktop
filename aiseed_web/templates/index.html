@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+  <div class="container">
+    <h1>自然農の農家と、<br>直接つながる。</h1>
+    <p class="hero-lead">aiseed は徳島の自然農を実践する農家の情報を、まっすぐに届けます。</p>
+    <div class="hero-actions">
+      <a class="btn" href="/farmers/">農家を見る</a>
+      <a class="btn btn-ghost" href="/about/">aiseed について</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <h2>紹介している農家</h2>
+    <div class="grid grid-3">
+      {% for farmer in farmers %}
+      <a class="card" href="/farmers/{{ farmer.id }}.html">
+        {% if farmer.image %}
+        <img class="card-image" src="/assets/images/{{ farmer.image }}" alt="{{ farmer.name }}" loading="lazy">
+        {% endif %}
+        <div class="card-body">
+          <h3>{{ farmer.name }}</h3>
+          <p class="card-meta">{{ farmer.region }}</p>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section section-alt">
+  <div class="container">
+    <h2>今の商品</h2>
+    <div class="grid grid-3">
+      {% for product in products %}
+      <a class="card" href="/products/{{ product.id }}.html">
+        {% if product.image %}
+        <img class="card-image" src="/assets/images/{{ product.image }}" alt="{{ product.name }}" loading="lazy">
+        {% endif %}
+        <div class="card-body">
+          <h3>{{ product.name }}</h3>
+          <p class="card-meta">{{ product.category }}</p>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

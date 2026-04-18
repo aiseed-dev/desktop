@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src https://api.aiseed.dev; style-src 'self'; script-src 'self';">
+  <title>{% block title %}{{ site_title }}{% endblock %}</title>
+  <meta name="description" content="{% block description %}自然農を実践する農家と消費者を直接つなぐ{% endblock %}">
+  <link rel="stylesheet" href="/assets/styles/design-system.css">
+  <link rel="stylesheet" href="/assets/styles/main.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-logo" href="/">aiseed</a>
+      <nav class="site-nav">
+        <a href="/farmers/">農家</a>
+        <a href="/products/">商品</a>
+        <a href="/shops/">店舗</a>
+        <a href="/blog/">お知らせ</a>
+        <a href="/about/">aiseed について</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; {{ year }} aiseed — 徳島</p>
+      <p class="footer-note">自然農の情報プラットフォーム。販売は店舗・朝市で行います。</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ farmer.name }} — {{ site_title }}{% endblock %}
+{% block description %}{{ farmer.region }} の自然農農家 {{ farmer.name }}{% endblock %}
+
+{% block content %}
+<article class="section">
+  <div class="container container-narrow">
+    <header class="article-head">
+      <p class="eyebrow">農家</p>
+      <h1>{{ farmer.name }}</h1>
+      <p class="meta">{{ farmer.region }} / {{ farmer.policy }}{% if farmer.since %} / {{ farmer.since }}年〜{% endif %}</p>
+    </header>
+    {% if farmer.image %}
+    <img class="hero-image" src="/assets/images/{{ farmer.image }}" alt="{{ farmer.name }}">
+    {% endif %}
+    <div class="prose">
+      {{ body | safe }}
+    </div>
+
+    {% if products %}
+    <h2>扱っている商品</h2>
+    <div class="grid grid-3">
+      {% for product in products %}
+      <a class="card" href="/products/{{ product.id }}.html">
+        {% if product.image %}
+        <img class="card-image" src="/assets/images/{{ product.image }}" alt="{{ product.name }}" loading="lazy">
+        {% endif %}
+        <div class="card-body">
+          <h3>{{ product.name }}</h3>
+          <p class="card-meta">{{ product.category }}</p>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</article>
+{% endblock %}
