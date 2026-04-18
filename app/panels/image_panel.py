@@ -28,19 +28,24 @@ def resize_and_convert(
         shutil.copy2(src_path, dst_path)
         return dst_path
 
-    img = PILImage.open(src_path)
+    with PILImage.open(src_path) as src:
+        src.load()
+        img = src.copy()
 
     # Convert RGBA to RGB for JPEG
     if fmt in ("jpg", "jpeg") and img.mode == "RGBA":
         bg = PILImage.new("RGB", img.size, (255, 255, 255))
         bg.paste(img, mask=img.split()[3])
+        img.close()
         img = bg
 
     # Resize if wider than max_width
     if img.width > max_width:
         ratio = max_width / img.width
         new_height = int(img.height * ratio)
-        img = img.resize((max_width, new_height), PILImage.LANCZOS)
+        resized = img.resize((max_width, new_height), PILImage.LANCZOS)
+        img.close()
+        img = resized
 
     # Determine output path with correct extension
     ext_map = {"webp": ".webp", "png": ".png", "jpg": ".jpg", "jpeg": ".jpg"}
@@ -52,7 +57,10 @@ def resize_and_convert(
     if save_fmt == "JPG":
         save_fmt = "JPEG"
 
-    img.save(out_path, format=save_fmt, quality=quality)
+    try:
+        img.save(out_path, format=save_fmt, quality=quality)
+    finally:
+        img.close()
     return out_path
 
 
@@ -61,8 +69,8 @@ def get_image_info(path: str) -> str:
     try:
         size_kb = os.path.getsize(path) / 1024
         if HAS_PILLOW:
-            img = PILImage.open(path)
-            return f"{img.width}x{img.height} | {size_kb:.0f} KB"
+            with PILImage.open(path) as img:
+                return f"{img.width}x{img.height} | {size_kb:.0f} KB"
         else:
             return f"{size_kb:.0f} KB"
     except Exception:
@@ -263,9 +271,9 @@ class ImagePanel(ft.Column):
             if ext == target_ext:
                 # Check if resize needed
                 try:
-                    img = PILImage.open(entry.path)
-                    if img.width <= max_width:
-                        continue
+                    with PILImage.open(entry.path) as img:
+                        if img.width <= max_width:
+                            continue
                 except Exception:
                     continue
 

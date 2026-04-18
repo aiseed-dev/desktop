@@ -92,12 +92,27 @@ class ClaudeCLI:
             callbacks.on_error("Claude Code CLI が見つかりません。インストールしてください。")
             return
 
+        self._stderr_chunks: list[str] = []
+        self._stderr_thread = threading.Thread(
+            target=self._drain_stderr,
+            args=(self._proc,),
+            daemon=True,
+        )
+        self._stderr_thread.start()
+
         self._thread = threading.Thread(
             target=self._read_stream,
             args=(self._proc, callbacks),
             daemon=True,
         )
         self._thread.start()
+
+    def _drain_stderr(self, proc: subprocess.Popen) -> None:
+        try:
+            for line in proc.stderr:
+                self._stderr_chunks.append(line)
+        except Exception:
+            pass
 
     def _read_stream(self, proc: subprocess.Popen, callbacks: StreamCallbacks) -> None:
         # Track active tool blocks by index for input accumulation
@@ -200,7 +215,9 @@ class ClaudeCLI:
                     callbacks.on_complete(info)
 
             proc.wait()
-            stderr = proc.stderr.read()
+            if hasattr(self, "_stderr_thread"):
+                self._stderr_thread.join(timeout=2)
+            stderr = "".join(getattr(self, "_stderr_chunks", []))
             if stderr and proc.returncode and proc.returncode != 0:
                 callbacks.on_error(stderr.strip())
 

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} — {{ site_title }}{% endblock %}
+{% block description %}{{ product.name }}{% if farmer %} / {{ farmer.name }}{% endif %}{% endblock %}
+
+{% block content %}
+<article class="section">
+  <div class="container container-narrow">
+    <header class="article-head">
+      <p class="eyebrow">商品</p>
+      <h1>{{ product.name }}</h1>
+      <p class="meta">
+        {{ product.category }}
+        {% if farmer %} /
+          <a href="/farmers/{{ farmer.id }}.html">{{ farmer.name }}</a>
+        {% endif %}
+        {% if product.season %}
+        / 旬: {{ product.season | join('・') }}
+        {% endif %}
+      </p>
+    </header>
+    {% if product.image %}
+    <img class="hero-image" src="/assets/images/{{ product.image }}" alt="{{ product.name }}">
+    {% endif %}
+    <div class="prose">
+      {{ body | safe }}
+    </div>
+    <aside class="callout">
+      <p><strong>購入について:</strong> aiseed は情報提供のみ行っています。ご購入は店舗・朝市・農家直売をご利用ください。</p>
+      <p><a href="/shops/">店舗・朝市一覧を見る</a></p>
+    </aside>
+  </div>
+</article>
+{% endblock %}

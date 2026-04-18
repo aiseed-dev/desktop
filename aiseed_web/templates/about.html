@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ meta.get('title', 'aiseed について') }} — {{ site_title }}{% endblock %}
+
+{% block content %}
+<article class="section">
+  <div class="container container-narrow">
+    <header class="article-head">
+      <h1>{{ meta.get('title', 'aiseed について') }}</h1>
+    </header>
+    <div class="prose">
+      {{ body | safe }}
+    </div>
+  </div>
+</article>
+{% endblock %}

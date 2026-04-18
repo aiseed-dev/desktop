@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}店舗・朝市 — {{ site_title }}{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1>店舗・朝市</h1>
+    <p class="lead">実際の販売はこちらで行っています。</p>
+    <div class="list">
+      {% for shop in shops %}
+      <article class="list-item">
+        <h2>{{ shop.name }}</h2>
+        <p class="meta">{{ shop.address }}</p>
+        {% if shop.open_days %}
+        <p class="meta">営業: {{ shop.open_days | join('・') }}</p>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

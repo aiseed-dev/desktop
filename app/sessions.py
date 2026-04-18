@@ -46,13 +46,13 @@ class SessionManager:
         self.sessions.insert(0, session)
         self._save()
 
-    def update(self, session_id: str, last_message: str = "", cost: float = 0.0) -> None:
+    def update(self, session_id: str, last_message: str = "", cost: Optional[float] = None) -> None:
         for s in self.sessions:
             if s.session_id == session_id:
                 if last_message:
                     s.last_message = last_message
-                if cost:
-                    s.total_cost = cost
+                if cost is not None:
+                    s.total_cost += cost
                 break
         self._save()
 
