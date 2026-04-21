@@ -109,6 +109,21 @@ python main.py
 }
 ```
 
+`build_command` / `deploy_command` は開くプロジェクトに合わせて設定する。
+Build パネルのボタンから実行される（`project_dir` を `cwd` として起動）。
+
+### 使用例: 静的サイト（[aiseed-dev/website](https://github.com/aiseed-dev/website)）
+
+```json
+{
+  "project_dir": "/path/to/website",
+  "build_command": "python tools/build_article.py --all",
+  "deploy_command": "rsync -avz --delete html/ user@server:/var/www/aiseed/"
+}
+```
+
+プロジェクト側に開発サーバー（`tools/serve.py` など）があればカスタムコマンド欄から起動できる。
+
 API キー管理は不要です。Claude Code CLI が認証を処理します。
 
 ## 技術スタック
@@ -139,21 +154,6 @@ Flet App
 
 AI の頭脳は全て Claude Code CLI が提供します。
 このアプリが実装するのは「表示」と「ファイル・画像の管理 UI」だけです。
-
-## 同梱ツール: aiseed_web ビルダー
-
-`aiseed_web/` は [aiseed-web](https://github.com/aiseed-dev/aiseed-web) 静的サイトの
-ビルダー。テンプレート・既定スタイル・検索スクリプト・Python ツールを同梱する。
-
-データ(content / data / images)は別リポジトリ `aiseed-web/` に置き、
-ビルド時に `--site <aiseed-web パス>` で指定する。詳細は
-[aiseed_web/README.md](./aiseed_web/README.md) 参照。
-
-```bash
-python aiseed_web/tools/build.py --site /path/to/aiseed-web
-python aiseed_web/tools/serve.py --site /path/to/aiseed-web
-python aiseed_web/tools/optimize_images.py --site /path/to/aiseed-web
-```
 
 ## ライセンス
 
